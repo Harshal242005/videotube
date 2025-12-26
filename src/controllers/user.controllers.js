@@ -20,7 +20,7 @@ const generateAccessAndRefreshToken = async (userId) => {
       const refreshToken = user.generateRefreshToken()
   
       user.refreshToken= refreshToken
-      await user.save({validateBeforSave: false})
+      await user.save({ validateBeforeSave: false})
       return {accessToken, refreshToken}
     } catch (error) {
       throw new ApiError(500, "Something went wrong while generating access and refresh tokens")
@@ -88,15 +88,27 @@ const registerUser = asynchandler(async (req, res) => {
 
 
      try {
-       const user =  await User.create({
-         fullname,
-         avatar: avatar.url,
-         coverImage: coverImage?.url || "",
-         email,
-         password,
-         username: username.toLowerCase()
+       const user = await User.create({
+ fullname,
+  email,
+  username: username.toLowerCase(),
+  password,
+
+  avatar: {
+    url: avatar.url,
+    public_id: avatar.public_id,
+  },
+
+  coverImage: coverImage
+    ? {
+        url: coverImage.url,
+        public_id: coverImage.public_id,
+      }
+    : undefined,
+});
+
  
-     })
+     
  
      const createdUser =  await User.findById(user._id)
      
@@ -109,7 +121,7 @@ const registerUser = asynchandler(async (req, res) => {
        .json( new ApiResponse(200, createdUser, "User registed successfully "))
  
      } catch (error) {
-         console.log("User creation failed");
+         console.log("User creation failed",error);
          if(avatar) {
           await deleteFromCloudinary(avatar.public_id)
          }
@@ -128,12 +140,10 @@ const loginUser = asynchandler(async(req, res) => {
 
 
     //validation
-    if(!email){
-      throw new ApiError(400, "Email is req")
-    }
-    if(!username){
-      throw new ApiError(400, "username is req")
-    }
+   if (!email && !username) {
+     throw new ApiError(400, "Email or username is required");
+   }
+
     if(!password){
       throw new ApiError(400, "password is req")
     }
@@ -264,7 +274,8 @@ const changeCurrentPassword = asynchandler(async (req, res) => {
     }
 
     user.password = newPassword;
-    await user.save({validateBeforeSave: false}); 
+    await user.save({ validateBeforeSave: false });
+ 
 
     return res
       .status(200)
@@ -317,21 +328,30 @@ const updateUserAvatar = asynchandler(async (req, res) => {
     throw new ApiError(400, "Avatar file is missing");
   }
 
+  
+   if (req.user.avatar?.public_id) {
+     await deleteFromCloudinary(req.user.avatar.public_id);
+   }
+
   const avatar = await uploadOnCloudinary(avatarLocalPath);
 
-  if(!avatar.url){
-    throw new ApiError(500, "Failed to upload avatar"); 
+
+  if (!avatar?.url || !avatar?.public_id) {
+    throw new ApiError(500, "Failed to upload avatar");
   }
 
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
     {
       $set: {
-        avatar: avatar.url,
+        avatar: {
+          url: avatar.url,
+          public_id: avatar.public_id,
+        },
       },
     },
     { new: true }
-  ).select("-password -refreshToken");  
+  ).select("-password -refreshToken"); 
 
   return res.status(200).json(new ApiResponse(200, updatedUser, "User avatar updated successfully"));
 })
@@ -341,6 +361,11 @@ const updateUserCoverImage = asynchandler(async (req, res) => {
   if (!coverImageLocalPath) {
     throw new ApiError(400, "Cover image file is missing");
   }   
+
+  if (req.user.coverImage?.public_id) {
+    await deleteFromCloudinary(req.user.coverImage.public_id);
+  }
+
   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
   if(!coverImage.url){
@@ -350,7 +375,10 @@ const updateUserCoverImage = asynchandler(async (req, res) => {
     req.user._id,
     {
       $set: {
-        coverImage: coverImage.url,
+        coverImage: {
+          url: coverImage.url,
+          public_id: coverImage.public_id,
+        },
       },
     },
     { new: true }
@@ -412,7 +440,7 @@ const getUserChannelProfile = asynchandler(async (req, res) => {
       },
       {
         //project only necessary fields
-        $$project: {
+        $project: {
           fullname: 1,  
           username: 1,
           avatar: 1,

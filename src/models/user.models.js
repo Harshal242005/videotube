@@ -26,12 +26,25 @@ const userSchema = new Schema(
       index: true,
     },
     avatar: {
-      type: String,
-      required: true,
+      url: {
+        type: String,
+        required: true,
+      },
+      public_id: {
+        type: String,
+        required: true,
+      },
     },
+
     coverImage: {
-      type: String,
+      url: {
+        type: String,
+      },
+      public_id: {
+        type: String,
+      },
     },
+
     watchHistory: [
       {
         type: Schema.Types.ObjectId,
@@ -54,6 +67,7 @@ userSchema.pre("save", async function (next) {
     return 
   }
   this.password = await bcrypt.hash(this.password, 10);
+  
 
   
 });
